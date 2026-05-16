@@ -1,6 +1,23 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
+import { Octokit } from '@octokit/rest';
+import chalk from 'chalk';
 import { loadConfig } from './config';
+
+// Type definitions
+type SupportedToken = 'USDC';
+type SupportedNetwork = 'testnet' | 'mainnet';
+interface ParsedRepo { owner: string; repo: string; }
+interface BountyRequest {
+  repository: string;
+  issueNumber: number;
+  issueTitle: string;
+  amount: number;
+  token: SupportedToken;
+  network: SupportedNetwork;
+  chain: string;
+  status: string;
+}
 const program = new Command();
 const config = loadConfig();
 const token=config.githubToken || process.env.GITHUB_TOKEN;//example usage of config value
