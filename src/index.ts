@@ -117,5 +117,35 @@ program
     }
   });
 
+program
+  .command('create')
+  .description('Create GitHub issues in bulk from a markdown file')
+  .option('-r, --repo <repo>', 'target repository (org/repo)')
+  .option('-f, --file <file>', 'markdown file with issues')
+  .action(async (options) => {
+    const { owner, repo } = parseRepo(options.repo);
+    const octokit = createOctokit();
+    const fs = await import('fs');
+    const content = fs.readFileSync(options.file, 'utf-8');
+    const lines = content.split('\n');
+    let title = '';
+    let bodyLines: string[] = [];
+    for (const line of lines) {
+      if (line.startsWith('#')) {
+        if (title) {
+          await octokit.issues.create({ owner, repo, title, body: bodyLines.join('\n').trim() });
+          console.log(`✓ Created issue: ${title}`);
+          bodyLines = [];
+        }
+        title = line.replace(/^#+\s*/, '').trim();
+      } else {
+        bodyLines.push(line);
+      }
+    }
+    if (title) {
+      await octokit.issues.create({ owner, repo, title, body: bodyLines.join('\n').trim() });
+      console.log(`✓ Created issue: ${title}`);
+    }
+  });
 program.parse();
 

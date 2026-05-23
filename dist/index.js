@@ -1,5 +1,38 @@
 #!/usr/bin/env node
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -80,34 +113,6 @@ program
     issues.forEach((issue) => console.log(`  #${issue.number} — ${issue.title}`));
 });
 program
-    .command('bounty')
-    .description('Attach a Stellar USDC bounty request to a GitHub issue')
-    .requiredOption('-r, --repo <repo>', 'target repository (org/repo)')
-    .requiredOption('-i, --issue <number>', 'target issue number')
-    .requiredOption('-a, --amount <amount>', 'bounty amount in USDC')
-    .option('-t, --token <token>', 'bounty token', 'USDC')
-    .option('-n, --network <network>', 'Stellar network: testnet or mainnet', 'testnet')
-    .option('--dry-run', 'validate and print the request without submitting')
-    .action(async (options) => {
-    const repoInput = options.repo || config.defaultRepo;
-    if (!repoInput)
-        throw new Error('Repository is required. Use --repo owner/repo or set defaultRepo in .issueflow.');
-    const { owner, repo } = parseRepo(repoInput);
-    const issueNumber = parseIssueNumber(options.issue);
-    const amount = parseAmount(options.amount);
-    const token = parseToken(options.token);
-    const network = parseNetwork(options.network);
-    const octokit = createOctokit();
-    const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
-    const request = createBountyRequest({ repository: repoInput, issueNumber, issueTitle: issue.title, amount, token, network, dryRun: Boolean(options.dryRun) });
-    printSummary(request);
-    if (options.dryRun)
-        return;
-    const result = await submitBountyRequest(request);
-    console.log(chalk_1.default.yellow(`\n${result.message}`));
-    console.log(chalk_1.default.green('Bounty request prepared successfully.'));
-});
-program
     .command('label')
     .description('Assign a label to multiple GitHub issues at once')
     .option('-r, --repo <repo>', 'target repository (org/repo)')
@@ -125,6 +130,37 @@ program
             labels: [options.label],
         });
         console.log(`✓ Label "${options.label}" added to #${issueNumber}`);
+    }
+});
+program
+    .command('create')
+    .description('Create GitHub issues in bulk from a markdown file')
+    .option('-r, --repo <repo>', 'target repository (org/repo)')
+    .option('-f, --file <file>', 'markdown file with issues')
+    .action(async (options) => {
+    const { owner, repo } = parseRepo(options.repo);
+    const octokit = createOctokit();
+    const fs = await Promise.resolve().then(() => __importStar(require('fs')));
+    const content = fs.readFileSync(options.file, 'utf-8');
+    const lines = content.split('\n');
+    let title = '';
+    let bodyLines = [];
+    for (const line of lines) {
+        if (line.startsWith('#')) {
+            if (title) {
+                await octokit.issues.create({ owner, repo, title, body: bodyLines.join('\n').trim() });
+                console.log(`✓ Created issue: ${title}`);
+                bodyLines = [];
+            }
+            title = line.replace(/^#+\s*/, '').trim();
+        }
+        else {
+            bodyLines.push(line);
+        }
+    }
+    if (title) {
+        await octokit.issues.create({ owner, repo, title, body: bodyLines.join('\n').trim() });
+        console.log(`✓ Created issue: ${title}`);
     }
 });
 program.parse();
