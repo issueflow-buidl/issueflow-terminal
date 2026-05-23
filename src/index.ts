@@ -20,10 +20,9 @@ interface BountyRequest {
 
 const program = new Command();
 const config = loadConfig();
-const token = config.githubToken || process.env.GITHUB_TOKEN;
 
 function createOctokit(): Octokit {
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const token = config.githubToken || process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
   return new Octokit(token ? { auth: token } : {});
 }
 
@@ -68,6 +67,7 @@ function printSummary(request: BountyRequest): void {
   console.log(`  Amount     : ${request.amount} ${request.token}`);
   console.log(`  Network    : ${request.network}`);
   console.log(`  Chain      : ${request.chain}`);
+  console.log(`  Status     : ${request.status}`);
 }
 
 async function submitBountyRequest(request: BountyRequest): Promise<{ message: string; payload: BountyRequest }> {
@@ -86,20 +86,14 @@ program
   .action(async (options) => {
     const { owner, repo } = parseRepo(options.repo);
     const octokit = createOctokit();
-    const { data: issues } = await octokit.issues.listForRepo({
-      owner,
-      repo,
-      state: 'open',
-    });
+    const { data: issues } = await octokit.issues.listForRepo({ owner, repo, state: 'open' });
     console.log('Total issues found:', issues.length);
     if (issues.length === 0) {
       console.log('No open issues found.');
       return;
     }
     console.log(`\nOpen issues in ${options.repo}:\n`);
-    issues.forEach((issue) => {
-      console.log(`  #${issue.number} — ${issue.title}`);
-    });
+    issues.forEach((issue) => console.log(`  #${issue.number} — ${issue.title}`));
   });
 
 program
