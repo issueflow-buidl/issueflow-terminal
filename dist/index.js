@@ -85,4 +85,24 @@ program
         console.log(`  #${issue.number} — ${issue.title}`);
     });
 });
+program
+    .command('label')
+    .description('Assign a label to multiple GitHub issues at once')
+    .option('-r, --repo <repo>', 'target repository (org/repo)')
+    .option('-i, --issues <numbers>', 'comma-separated issue numbers (e.g. 1,2,3)')
+    .option('-l, --label <label>', 'label to assign')
+    .action(async (options) => {
+    const { owner, repo } = parseRepo(options.repo);
+    const octokit = createOctokit();
+    const issueNumbers = options.issues.split(',').map((n) => parseInt(n.trim()));
+    for (const issueNumber of issueNumbers) {
+        await octokit.issues.addLabels({
+            owner,
+            repo,
+            issue_number: issueNumber,
+            labels: [options.label],
+        });
+        console.log(`✓ Label "${options.label}" added to #${issueNumber}`);
+    }
+});
 program.parse();
