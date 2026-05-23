@@ -97,33 +97,25 @@ program
   });
 
 program
-  .command('bounty')
-  .description('Attach a Stellar USDC bounty request to a GitHub issue')
-  .requiredOption('-r, --repo <repo>', 'target repository (org/repo)')
-  .requiredOption('-i, --issue <number>', 'target issue number')
-  .requiredOption('-a, --amount <amount>', 'bounty amount in USDC')
-  .option('-t, --token <token>', 'bounty token', 'USDC')
-  .option('-n, --network <network>', 'Stellar network: testnet or mainnet', 'testnet')
-  .option('--dry-run', 'validate and print the request without submitting')
+  .command('label')
+  .description('Assign a label to multiple GitHub issues at once')
+  .option('-r, --repo <repo>', 'target repository (org/repo)')
+  .option('-i, --issues <numbers>', 'comma-separated issue numbers (e.g. 1,2,3)')
+  .option('-l, --label <label>', 'label to assign')
   .action(async (options) => {
-    const repoInput = options.repo || config.defaultRepo;
-    if (!repoInput) throw new Error('Repository is required. Use --repo owner/repo or set defaultRepo in .issueflow.');
-
-    const { owner, repo } = parseRepo(repoInput);
-    const issueNumber = parseIssueNumber(options.issue);
-    const amount = parseAmount(options.amount);
-    const token = parseToken(options.token);
-    const network = parseNetwork(options.network);
+    const { owner, repo } = parseRepo(options.repo);
     const octokit = createOctokit();
-    const { data: issue } = await octokit.issues.get({ owner, repo, issue_number: issueNumber });
-    const request = createBountyRequest({ repository: repoInput, issueNumber, issueTitle: issue.title, amount, token, network, dryRun: Boolean(options.dryRun) });
-
-    printSummary(request);
-    if (options.dryRun) return;
-
-    const result = await submitBountyRequest(request);
-    console.log(chalk.yellow(`\n${result.message}`));
-    console.log(chalk.green('Bounty request prepared successfully.'));
+    const issueNumbers = options.issues.split(',').map((n: string) => parseInt(n.trim()));
+    for (const issueNumber of issueNumbers) {
+      await octokit.issues.addLabels({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        labels: [options.label],
+      });
+      console.log(`✓ Label "${options.label}" added to #${issueNumber}`);
+    }
   });
 
 program.parse();
+
