@@ -2,6 +2,7 @@
 import { Command } from 'commander';
 import { Octokit } from '@octokit/rest';
 import chalk from 'chalk';
+import inquirer from 'inquirer';
 import { loadConfig } from './config';
 
 type SupportedToken = 'USDC';
@@ -147,5 +148,105 @@ program
       console.log(`✓ Created issue: ${title}`);
     }
   });
+program
+  .command('interactive')
+  .description('Interactively run any command via guided prompts')
+  .action(async () => {
+    const { command } = await inquirer.prompt<{ command: string }>([
+      {
+        type: 'list',
+        name: 'command',
+        message: 'What would you like to do?',
+        choices: [
+          { name: 'List open issues', value: 'list' },
+          { name: 'Label issues', value: 'label' },
+          { name: 'Create issues from a markdown file', value: 'create' },
+        ],
+      },
+    ]);
+
+    const { repo } = await inquirer.prompt<{ repo: string }>([
+      {
+        type: 'input',
+        name: 'repo',
+        message: 'Enter the target repository (owner/repo):',
+        validate: (value: string) => {
+          try { parseRepo(value); return true; } catch (e: any) { return e.message; }
+        },
+      },
+    ]);
+
+    const { owner, repo: repoName } = parseRepo(repo);
+    const octokit = createOctokit();
+
+    if (command === 'list') {
+      const { data: issues } = await octokit.issues.listForRepo({ owner, repo: repoName, state: 'open' });
+      console.log('Total issues found:', issues.length);
+      if (issues.length === 0) {
+        console.log('No open issues found.');
+        return;
+      }
+      console.log(chalk.cyan(`\nOpen issues in ${repo}:\n`));
+      issues.forEach((issue) => console.log(`  #${issue.number} — ${issue.title}`));
+    }
+
+    if (command === 'label') {
+      const { issues, label } = await inquirer.prompt<{ issues: string; label: string }>([
+        {
+          type: 'input',
+          name: 'issues',
+          message: 'Enter comma-separated issue numbers (e.g. 1,2,3):',
+          validate: (value: string) => value.trim().length > 0 || 'Please enter at least one issue number.',
+        },
+        {
+          type: 'input',
+          name: 'label',
+          message: 'Enter the label to assign:',
+          validate: (value: string) => value.trim().length > 0 || 'Label cannot be empty.',
+        },
+      ]);
+      const issueNumbers = issues.split(',').map((n: string) => parseInt(n.trim()));
+      for (const issueNumber of issueNumbers) {
+        await octokit.issues.addLabels({ owner, repo: repoName, issue_number: issueNumber, labels: [label] });
+        console.log(`✓ Label "${label}" added to #${issueNumber}`);
+      }
+    }
+
+    if (command === 'create') {
+      const { file } = await inquirer.prompt<{ file: string }>([
+        {
+          type: 'input',
+          name: 'file',
+          message: 'Enter the path to the markdown file:',
+          validate: (value: string) => {
+            const fs = require('fs');
+            return fs.existsSync(value) || `File not found: ${value}`;
+          },
+        },
+      ]);
+      const fs = await import('fs');
+      const content = fs.readFileSync(file, 'utf-8');
+      const lines = content.split('\n');
+      let title = '';
+      let bodyLines: string[] = [];
+      for (const line of lines) {
+        if (line.startsWith('#')) {
+          if (title) {
+            await octokit.issues.create({ owner, repo: repoName, title, body: bodyLines.join('\n').trim() });
+            console.log(`✓ Created issue: ${title}`);
+            bodyLines = [];
+          }
+          title = line.replace(/^#+\s*/, '').trim();
+        } else {
+          bodyLines.push(line);
+        }
+      }
+      if (title) {
+        await octokit.issues.create({ owner, repo: repoName, title, body: bodyLines.join('\n').trim() });
+        console.log(`✓ Created issue: ${title}`);
+      }
+    }
+  });
+
 program.parse();
 
